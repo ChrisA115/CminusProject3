@@ -18,6 +18,8 @@
 #include <codegen/types.h>
 #include <codegen/codegen.h>
 #include <codegen/reg.h>
+#include <util/dlink.h>
+
 
 #define SYMTABLE_SIZE 100
 

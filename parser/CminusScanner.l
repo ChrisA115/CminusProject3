@@ -3,12 +3,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../codegen/codegen.h"
-#include "CminusParser.h"
+#include <util/dlink.h>      /* defines DList, DNode */
+#include <util/symtab.h>     /* optional but fine */
+#include <util/symtab_stack.h> /* optional */
+#include <util/string_utils.h> /* optional */
+
+#include <codegen/symfields.h> /* optional */
+#include <codegen/types.h>     /* optional */
+#include <codegen/codegen.h>   /* uses DList in prototypes */
+#include <codegen/reg.h>       /* optional */
+
+#include "CminusParser.h"      /* uses DList in YYSTYPE union */
 
 int Cminus_lineno = 1;
 FILE *Cminus_in;
 %}
+
 
 /* ================== DEFINITIONS ================== */
 DIGIT      [0-9]
@@ -59,7 +69,7 @@ STRING     \"([^\\\"]|\\.)*\"
 "("             { return LPAREN; }
 ")"             { return RPAREN; }
 
-/* literals and identifiers */
+ /* literals and identifiers */
 {INTCON}        {
                     Cminus_lval.name = strdup(yytext);
                     return INTCON;
@@ -75,7 +85,7 @@ STRING     \"([^\\\"]|\\.)*\"
                     return IDENTIFIER;
                 }
 
-/* whitespace and comments */
+ /* whitespace and comments */
 [ \t\r]+        { /* ignore */ }
 \n              { ++Cminus_lineno; }
 
@@ -93,7 +103,7 @@ STRING     \"([^\\\"]|\\.)*\"
                     }
                 }
 
-/* error fallback */
+ /* error fallback */
 . {
     fprintf(stderr,
             "Lexical error at line %d: unexpected character '%s'\n",

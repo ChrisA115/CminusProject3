@@ -631,23 +631,41 @@ void addIdToSymtab(DNode node, AddIdStructPtr data) {
 int emitComputeArrayAddress(DList instList, SymTable symtab, int varIndex,
                             SymTable regSymtab, int subIndex) {
 
-	/* regSymtab is currently unused; all registers live in symtab */
-	(void)regSymtab;
+    /* regSymtab is currently unused; all registers live in symtab */
+    (void)regSymtab;
 
-	/* Compute the base address of the array (start of element 0). */
-	int baseRegIndex = emitComputeVariableAddress(instList, symtab, varIndex);
+    /* Compute the base address of the array (start of element 0). */
+    int baseRegIndex = emitComputeVariableAddress(instList, symtab, varIndex);
 
-	/* Scale the subscript by the element size (4 bytes for an integer). */
-	int fourRegIndex = emitLoadIntegerConstant(instList, symtab,
-                                           SymQueryIndex(symtab, "4"));
+    /* Load the constant 4 directly into a register (size of one int). */
+    int fourRegIndex = getFreeIntegerRegisterIndex(symtab);
+    if (fourRegIndex == SYM_INVALID_INDEX) {
+        fprintf(stderr, "Internal error: no free integer register available for array index scaling.\n");
+        exit(1);
+    }
 
-	int offsetRegIndex =
-		emitMultiplyExpression(instList, symtab, subIndex, fourRegIndex);
+    char* fourRegName =
+        (char*)SymGetFieldByIndex(symtab, fourRegIndex, SYM_NAME_FIELD);
 
-	/* Add scaled subscript to the base address to obtain &a[i]. */
-	int addrRegIndex =
-		emitAddExpression(instList, symtab, baseRegIndex, offsetRegIndex);
+    if (fourRegName == NULL) {
+        fprintf(stderr, "Internal error: register name not found in symtab for index %d\n", fourRegIndex);
+        exit(1);
+    }
 
-	return addrRegIndex;
+    /* li <reg>, 4 */
+    char* inst = nssave(4, "\tli ", fourRegName, ", ", "4");
+    dlinkAppend(instList, dlinkNodeAlloc(inst));
+
+    /* offsetReg = subIndex * 4 */
+    int offsetRegIndex =
+        emitMultiplyExpression(instList, symtab, subIndex, fourRegIndex);
+
+    /* addrReg = baseReg + offsetReg = &a[i] */
+    int addrRegIndex =
+        emitAddExpression(instList, symtab, baseRegIndex, offsetRegIndex);
+
+    return addrRegIndex;
 }
+
+
 
