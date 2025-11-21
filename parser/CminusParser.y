@@ -40,6 +40,51 @@ static int functionOffset;
 int globalOffset = 0;
 static char* functionName;
 
+/* ===== Label support for if/while codegen ===== */
+
+static int labelCounter = 0;
+
+/* Allocate a fresh label like .L0, .L1, ... */
+static char* newLabel() {
+    char buf[20];
+    sprintf(buf, ".L%d", labelCounter++);
+    return ssave(buf);  /* from string_utils */
+}
+
+/* Emit "label:  nop" */
+static void emitLabel(char* label) {
+    char* inst = nssave(2, label, ":\tnop");
+    dlinkAppend(instList, dlinkNodeAlloc(inst));
+}
+
+/* Emit "beq <reg>, $zero, label" and free the register */
+static void emitBranchIfFalse(int regIndex, char* label) {
+    if (regIndex == SYM_INVALID_INDEX) {
+        /* Bad condition expression; just bail quietly. */
+        return;
+    }
+
+    char* regName =
+        (char*)SymGetFieldByIndex(symtab, regIndex, SYM_NAME_FIELD);
+
+    char* inst = nssave(4, "\tbeq ", regName, ", $zero, ", label);
+
+    dlinkAppend(instList, dlinkNodeAlloc(inst));
+
+    /* Condition result no longer needed. */
+    freeIntegerRegister(
+        (int)SymGetFieldByIndex(symtab, regIndex, SYMTAB_REGISTER_INDEX_FIELD)
+    );
+}
+
+/* Emit "j label" */
+static void emitGoto(char* label) {
+    char* inst = nssave(2, "\tj ", label);
+    dlinkAppend(instList, dlinkNodeAlloc(inst));
+}
+
+
+
 extern union YYSTYPE yylval;
 
 extern int Cminus_lineno;
@@ -96,10 +141,10 @@ extern int Cminus_lineno;
 %left TIMES DIVIDE
 
 %union {
-	char*	name;
-	int     symIndex;
-	DList	idList;
-	int 	offset;
+    char*  name;
+    int    symIndex;
+    DList  idList;
+    int    offset;
 }
 
 %type <idList> IdentifierList
@@ -107,6 +152,9 @@ extern int Cminus_lineno;
 %type <symIndex> MulExpr Factor Variable StringConstant Constant VarDecl FunctionDecl ProcedureHead
 %type <offset> DeclList
 %type <name> IDENTIFIER STRING FLOATCON INTCON 
+%type <name> Test TestAndThen
+
+
 
 /***********************PRODUCTIONS****************************/
 %%
@@ -238,16 +286,45 @@ Assignment      : Variable ASSIGN Expr SEMICOLON
 		}
                 ;
 				
-IfStatement	: IF TestAndThen ELSE CompoundStatement
-		| IF TestAndThen
-		;
-		
-				
-TestAndThen	: Test CompoundStatement
-		;
-				
-Test		: LPAREN Expr RPAREN
-		;
+IfStatement
+    : IF TestAndThen ELSE CompoundStatement
+      {
+          /* if (expr) then-part else else-part */
+          /* $2 is the end-label produced by TestAndThen */
+          emitLabel($2);
+      }
+    | IF TestAndThen
+      {
+          /* if (expr) then-part;  // no else */
+          emitLabel($2);
+      }
+    ;
+
+TestAndThen
+    : Test CompoundStatement
+      {
+          /* $1 is else-label from Test.
+             Create a fresh end-label and:
+               1) jump over the else-part to end-label
+               2) define else-label
+          */
+          char* endLabel = newLabel();
+          emitGoto(endLabel);   /* j endLabel */
+          emitLabel($1);        /* else_label: nop */
+          $$ = endLabel;        /* pass end-label up to IfStatement */
+      }
+    ;
+
+Test
+    : LPAREN Expr RPAREN
+      {
+          /* Evaluate Expr (already done) and branch to else-label if false. */
+          char* elseLabel = newLabel();
+          emitBranchIfFalse($2, elseLabel);  /* beq cond, $zero, elseLabel */
+          $$ = elseLabel;                    /* $$ is the else-label */
+      }
+    ;
+
 	
 
 WhileStatement  : WhileToken WhileExpr Statement
