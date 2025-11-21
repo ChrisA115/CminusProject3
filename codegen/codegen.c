@@ -604,19 +604,27 @@ int emitLoadStringConstantAddress(DList instList, DList dataList, SymTable symta
  */
 void addIdToSymtab(DNode node, AddIdStructPtr data) {
 
-	int symIndex = (int)dlinkNodeAtom(node);
-	
-	/* Determine how many bytes this variable (possibly an array) occupies. */
-	int size = (int)SymGetFieldByIndex(data->symtab,symIndex,SYMTAB_SIZE_FIELD);
-	if (size <= 0) {
-		/* Default to a single integer if size was not initialized. */
-		size = INTEGER_SIZE;
-	}
-	
-	data->offset += size * data->offsetDirection;
-	SymPutFieldByIndex(data->symtab,symIndex,SYMTAB_OFFSET_FIELD,(Generic)data->offset);
-	
+    int symIndex = (int)dlinkNodeAtom(node);
+
+    /* How many bytes this variable occupies (scalar or array). */
+    int size = (int)SymGetFieldByIndex(data->symtab, symIndex, SYMTAB_SIZE_FIELD);
+    if (size <= 0) {
+        size = INTEGER_SIZE;
+    }
+
+    if (data->offsetDirection > 0) {
+        /* For globals: current offset is the base address. */
+        SymPutFieldByIndex(data->symtab, symIndex,
+                           SYMTAB_OFFSET_FIELD, (Generic)data->offset);
+        data->offset += size * data->offsetDirection;
+    } else {
+        /* For downward-growing frames (if you ever use them): */
+        data->offset += size * data->offsetDirection;
+        SymPutFieldByIndex(data->symtab, symIndex,
+                           SYMTAB_OFFSET_FIELD, (Generic)data->offset);
+    }
 }
+
 
 /**
  * Compute the address of an element of an integer array.

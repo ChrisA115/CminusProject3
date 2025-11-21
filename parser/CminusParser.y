@@ -153,6 +153,8 @@ extern int Cminus_lineno;
 %type <offset> DeclList
 %type <name> IDENTIFIER STRING FLOATCON INTCON 
 %type <name> Test TestAndThen
+%type <name> WhileToken WhileExpr
+
 
 
 
@@ -286,55 +288,69 @@ Assignment      : Variable ASSIGN Expr SEMICOLON
 		}
                 ;
 				
-IfStatement
-    : IF TestAndThen ELSE CompoundStatement
+Test
+    : LPAREN Expr RPAREN
       {
-          /* if (expr) then-part else else-part */
-          /* $2 is the end-label produced by TestAndThen */
-          emitLabel($2);
-      }
-    | IF TestAndThen
-      {
-          /* if (expr) then-part;  // no else */
-          emitLabel($2);
+          char* elseLabel = newLabel();
+          emitBranchIfFalse($2, elseLabel);
+          $$ = elseLabel;        /* $$ = else_label */
       }
     ;
 
 TestAndThen
     : Test CompoundStatement
       {
-          /* $1 is else-label from Test.
-             Create a fresh end-label and:
-               1) jump over the else-part to end-label
-               2) define else-label
-          */
           char* endLabel = newLabel();
-          emitGoto(endLabel);   /* j endLabel */
-          emitLabel($1);        /* else_label: nop */
-          $$ = endLabel;        /* pass end-label up to IfStatement */
+          emitGoto(endLabel);     /* jump over else-part */
+          emitLabel($1);          /* else_label */
+          $$ = endLabel;          /* $$ = end_label */
       }
     ;
 
-Test
+IfStatement
+    : IF TestAndThen ELSE CompoundStatement
+      {
+          emitLabel($2);          /* end_label */
+      }
+    | IF TestAndThen
+      {
+          emitLabel($2);          /* end_label */
+      }
+    ;
+
+
+WhileStatement
+    : WhileToken WhileExpr Statement
+      {
+          /* jump back to startLabel ($1) */
+          emitGoto($1);
+
+          /* endLabel ($2) */
+          emitLabel($2);
+      }
+    ;
+
+WhileExpr
     : LPAREN Expr RPAREN
       {
-          /* Evaluate Expr (already done) and branch to else-label if false. */
-          char* elseLabel = newLabel();
-          emitBranchIfFalse($2, elseLabel);  /* beq cond, $zero, elseLabel */
-          $$ = elseLabel;                    /* $$ is the else-label */
+          /* create end-label and branch to it if false */
+          char* endLabel = newLabel();
+          emitBranchIfFalse($2, endLabel);
+          $$ = endLabel;
       }
     ;
 
-	
+WhileToken
+    : WHILE
+      {
+          /* create and emit start-label */
+          char* startLabel = newLabel();
+          emitLabel(startLabel);
+          $$ = startLabel;
+      }
+    ;
 
-WhileStatement  : WhileToken WhileExpr Statement
-                ;
-                
-WhileExpr	: LPAREN Expr RPAREN
-		;
-				
-WhileToken	: WHILE
-		;
+
 
 
 IOStatement     : READ LPAREN Variable RPAREN SEMICOLON
