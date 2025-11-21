@@ -606,10 +606,48 @@ void addIdToSymtab(DNode node, AddIdStructPtr data) {
 
 	int symIndex = (int)dlinkNodeAtom(node);
 	
-	int  size = 4;
+	/* Determine how many bytes this variable (possibly an array) occupies. */
+	int size = (int)SymGetFieldByIndex(data->symtab,symIndex,SYMTAB_SIZE_FIELD);
+	if (size <= 0) {
+		/* Default to a single integer if size was not initialized. */
+		size = INTEGER_SIZE;
+	}
 	
-	data->offset += size*data->offsetDirection;
+	data->offset += size * data->offsetDirection;
 	SymPutFieldByIndex(data->symtab,symIndex,SYMTAB_OFFSET_FIELD,(Generic)data->offset);
 	
+}
+
+/**
+ * Compute the address of an element of an integer array.
+ *
+ * @param instList a DList of instructions
+ * @param symtab a symbol table (also used for registers)
+ * @param varIndex the symbol table index of the array variable
+ * @param regSymtab an (unused) symbol table for registers
+ * @param subIndex the symbol table index of the register holding the subscript value
+ * @return the symbol table index of the register that holds the address of a[i]
+ */
+int emitComputeArrayAddress(DList instList, SymTable symtab, int varIndex,
+                            SymTable regSymtab, int subIndex) {
+
+	/* regSymtab is currently unused; all registers live in symtab */
+	(void)regSymtab;
+
+	/* Compute the base address of the array (start of element 0). */
+	int baseRegIndex = emitComputeVariableAddress(instList, symtab, varIndex);
+
+	/* Scale the subscript by the element size (4 bytes for an integer). */
+	int fourIndex = SymIndex(symtab, "4");
+	int fourRegIndex = emitLoadIntegerConstant(instList, symtab, fourIndex);
+
+	int offsetRegIndex =
+		emitMultiplyExpression(instList, symtab, subIndex, fourRegIndex);
+
+	/* Add scaled subscript to the base address to obtain &a[i]. */
+	int addrRegIndex =
+		emitAddExpression(instList, symtab, baseRegIndex, offsetRegIndex);
+
+	return addrRegIndex;
 }
 

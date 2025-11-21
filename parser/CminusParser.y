@@ -200,11 +200,20 @@ IdentifierList 	: VarDecl
 
 VarDecl 	: IDENTIFIER
 		{ 
-			$$ = SymIndex(symtab,$1);
+			int symIndex = SymIndex(symtab,$1);
+			/* scalars occupy one integer slot */
+			SymPutFieldByIndex(symtab,symIndex,SYMTAB_SIZE_FIELD,(Generic)INTEGER_SIZE);
+			$$ = symIndex;
 		}
 		| IDENTIFIER LBRACKET INTCON RBRACKET
 		{
-			$$ = SYM_INVALID_INDEX;
+			int symIndex = SymIndex(symtab,$1);
+			int length = atoi($3);        /* number of elements */
+			int sizeInBytes = length * INTEGER_SIZE;
+
+			/* reserve length * 4 bytes for this array */
+			SymPutFieldByIndex(symtab,symIndex,SYMTAB_SIZE_FIELD,(Generic)sizeInBytes);
+			$$ = symIndex;
 		}
 		;
 
@@ -385,7 +394,14 @@ Variable        : IDENTIFIER
 		}
                 | IDENTIFIER LBRACKET Expr RBRACKET    
 		{
-			$$ = SYM_INVALID_INDEX;
+			int symIndex = SymQueryIndex(symtab,$1);
+			if (symIndex == SYM_INVALID_INDEX) {
+				Cminus_error("undeclared array variable");
+				$$ = SYM_INVALID_INDEX;
+			} else {
+				/* compute &a[Expr] */
+				$$ = emitComputeArrayAddress(instList,symtab,symIndex,symtab,$3);
+			}
 		}
                 ;			       
 
@@ -423,13 +439,15 @@ static void initSymTable() {
 
 	SymInitField(symtab,SYMTAB_OFFSET_FIELD,(Generic)-1,NULL);
 	SymInitField(symtab,SYMTAB_REGISTER_INDEX_FIELD,(Generic)-1,NULL);
+	/* Default each variable's size to one integer unless overridden (e.g., arrays). */
+	SymInitField(symtab,SYMTAB_SIZE_FIELD,(Generic)INTEGER_SIZE,NULL);
 }
 
 static void deleteSymTable() {
+    SymKillField(symtab,SYMTAB_SIZE_FIELD);
     SymKillField(symtab,SYMTAB_REGISTER_INDEX_FIELD);
     SymKillField(symtab,SYMTAB_OFFSET_FIELD);
     SymKill(symtab);
-
 }
 
 static void initialize(char* inputFileName) {
