@@ -638,8 +638,8 @@ int emitComputeArrayAddress(DList instList, SymTable symtab, int varIndex,
 	int baseRegIndex = emitComputeVariableAddress(instList, symtab, varIndex);
 
 	/* Scale the subscript by the element size (4 bytes for an integer). */
-	int fourIndex = SymIndex(symtab, "4");
-	int fourRegIndex = emitLoadIntegerConstant(instList, symtab, fourIndex);
+	int fourRegIndex = emitLoadIntegerConstant(instList, symtab,
+                                           SymQueryIndex(symtab, "4"));
 
 	int offsetRegIndex =
 		emitMultiplyExpression(instList, symtab, subIndex, fourRegIndex);

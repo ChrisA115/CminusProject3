@@ -91,7 +91,7 @@ extern int Cminus_lineno;
 %left NOT
 %left LT LE GT GE NE EQ
 %left PLUS MINUS
-%left TIMES DIVDE
+%left TIMES DIVIDE
 
 %union {
 	char*	name;

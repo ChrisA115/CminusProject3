@@ -1,112 +1,105 @@
-WS	[ \t]
-
 %{
-
-/* This scanner approximates the Void specification.
- *
- * Major differences:
- *
- *  (1) the printed spec is wrong in about sixteen ways in its definition
- *	of numeric constants.  The scanner recognizes a fairly broad class
- * 	of things as constants - it allows both 0 and 1.0 as constants, where
- *	the document would not.
- *
- *      Feel free to accept the things that the scanner accepts as constants.
- *	The bug is in the original spec document.
- *
- *	Note: the scanner classifies all kinds of constants as "constant".
- *	It does not make a distinction between character, integer, and floating
- *	point constants.  I think of that distinction as something to look for
- *	in the type checker lab, not something that the grammar should enforce.
- *
- *
- * To hook this thing up to your parser, you will need to take the include
- * file of grammar terminals and relate them to the constants defined below.
- * You can either edit the flex spec or edit the constant defintions.  (Of
- * course, you should do that on your own copy!)  
- *
- */
-
-
 #include <stdio.h>
-#include <util/symtab.h>
-#include <util/symtab_stack.h>
-#include <util/string_utils.h>
-#include <util/dlink.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "../codegen/codegen.h"
 #include "CminusParser.h"
 
-extern SymtabStack symtabStack;
-
+int Cminus_lineno = 1;
+FILE *Cminus_in;
 %}
 
-%option bison-bridge
-%option prefix="Cminus_"
+/* ================== DEFINITIONS ================== */
+DIGIT      [0-9]
+LETTER     [a-zA-Z]
+ID         {LETTER}({LETTER}|{DIGIT}|_)*
+INTCON     {DIGIT}+
+STRING     \"([^\\\"]|\\.)*\"
 
+/* ================== RULES ================== */
+%%
+"if"            { return IF; }
+"else"          { return ELSE; }
+"while"         { return WHILE; }
+"for"           { return FOR; }
+"return"        { return RETURN; }
+
+"read"          { return READ; }
+"write"         { return WRITE; }
+"exit"          { return EXIT; }
+
+"int"           { return INTEGER; }
+"integer"       { return INTEGER; }
+"float"         { return FLOAT; }
+
+"&&"            { return AND; }
+"||"            { return OR; }
+"!"             { return NOT; }
+
+"<="            { return LE; }
+">="            { return GE; }
+"=="            { return EQ; }
+"!="            { return NE; }
+"<"             { return LT; }
+">"             { return GT; }
+
+"+"             { return PLUS; }
+"-"             { return MINUS; }
+"*"             { return TIMES; }
+"/"             { return DIVIDE; }
+
+"="             { return ASSIGN; }
+","             { return COMMA; }
+";"             { return SEMICOLON; }
+"{"             { return LBRACE; }
+"}"             { return RBRACE; }
+"["             { return LBRACKET; }
+"]"             { return RBRACKET; }
+"("             { return LPAREN; }
+")"             { return RPAREN; }
+
+/* literals and identifiers */
+{INTCON}        {
+                    Cminus_lval.name = strdup(yytext);
+                    return INTCON;
+                }
+
+{STRING}        {
+                    Cminus_lval.name = strdup(yytext);
+                    return STRING;
+                }
+
+{ID}            {
+                    Cminus_lval.name = strdup(yytext);
+                    return IDENTIFIER;
+                }
+
+/* whitespace and comments */
+[ \t\r]+        { /* ignore */ }
+\n              { ++Cminus_lineno; }
+
+"//".*          { /* single-line comment */ }
+
+"/*"            {
+                    int c;
+                    while ((c = input()) != 0) {
+                        if (c == '*') {
+                            if ((c = input()) == '/') break;
+                            else unput(c);
+                        } else if (c == '\n') {
+                            ++Cminus_lineno;
+                        }
+                    }
+                }
+
+/* error fallback */
+. {
+    fprintf(stderr,
+            "Lexical error at line %d: unexpected character '%s'\n",
+            Cminus_lineno, yytext);
+}
 %%
 
-int				{ return INTEGER;}
-while				{ return WHILE; }
-else				{ return ELSE; }
-exit				{ return EXIT; }
-float				{ return FLOAT; }
-if				{ return IF; }
-read				{ return READ; }
-write				{ return WRITE; }
-return				{ return RETURN; }
-
-\!				{ return NOT;}
-"||"		    		{ return OR;}
-\&&				{ return AND;}
-\<=				{ return LE; }
-\<				{ return LT; }
-\>=				{ return GE; }
-\>				{ return GT; }
-\==				{ return EQ; }
-\!=				{ return NE; }
-\=				{ return ASSIGN; }
-\;				{ return SEMICOLON; }
-\{			    	{ return LBRACE; }
-"}"			    	{ return RBRACE; }
-\[				{ return LBRACKET; }
-\]				{ return RBRACKET; }
-\(				{ return LPAREN; }
-\)				{ return RPAREN; }
-\+				{ return PLUS; }
-\-          			{ return MINUS; }
-\*				{ return TIMES; }
-\/				{ return DIVIDE;}
-","				{ return COMMA;}
-
-\"[^\"]*\"			{ 
-					Cminus_lval.name = ssave(Cminus_text);
-					return STRING; 
-				}
-	
-[a-zA-Z]([a-zA-Z]|[0-9])*	{ 
-					Cminus_lval.name = ssave(Cminus_text);
-					return IDENTIFIER; 
-				}
-	
-[0-9]+				{ 
-					Cminus_lval.name = ssave(Cminus_text);
-					return INTCON; 
-				}
-
-{WS}				{ ; }
-"\n"				{ Cminus_lineno++;}
-
-[0-9]*(\.)[0-9]+((e|E)(\+|\-)?[0-9]*)?/[^.$]   { 
-							Cminus_lval.name = ssave(Cminus_text);
-							return FLOATCON; 
-						}
-
-[0-9]+((e|E)(\+|\-)?[0-9]*)/[^.$]  { 
-					Cminus_lval.name = ssave(Cminus_text);
-					return FLOATCON; 
-				   }
-
-
-.				{
-					fprintf(stderr, "Scanner: lexical error '%s'.\n", Cminus_text); 
-				}
-%%
+int yywrap(void) { return 1; }
+int Cminus_lex(void) { return yylex(); }
